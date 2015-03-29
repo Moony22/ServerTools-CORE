@@ -22,6 +22,7 @@ import static info.servertools.core.command.CommandLevel.OP;
 
 import info.servertools.core.command.CommandLevel;
 import info.servertools.core.command.ServerToolsCommand;
+import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.command.WrongUsageException;
@@ -29,8 +30,11 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityList;
 import net.minecraft.entity.EntityLiving;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
+import net.minecraftforge.common.DimensionManager;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -66,24 +70,45 @@ public class CommandSpawnMob extends ServerToolsCommand {
     @Override
     public String getCommandUsage(ICommandSender sender) {
 
-        return "/" + name + " [mobname] {ammount}";
+        return "/" + name + " [mobname] {amount} OR /" + name + " [mobname] {dimen id} <x> <y> <z> {amount} OR /" + name + " [mobname] [playername] {amount}";
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void processCommand(ICommandSender sender, String[] args) throws CommandException {
 
-        if (!(sender instanceof EntityPlayer)) { throw new WrongUsageException("Only players can use that command"); }
+        if (!(sender instanceof EntityPlayer) && args.length <= 1) { throw new WrongUsageException("You must specify a location if you are not a player!"); }
 
-        EntityPlayer player = (EntityPlayer) sender;
+        double x = 0; double y = 0; double z = 0;
+        WorldServer world = MinecraftServer.getServer().worldServers[0];
 
-        if (args.length < 1) {
-            throw new WrongUsageException(getCommandUsage(sender));
+        if(sender instanceof EntityPlayer) {
+            EntityPlayer player = (EntityPlayer) sender;
+            x = player.posX; y = player.posY; z = player.posZ;
+            world = (WorldServer) player.worldObj;
         }
 
         int amount = 1;
-        if (args.length > 1) {
+        if (args.length == 2) {
             amount = parseInt(args[1], 1, 100);
+        }
+        else if(args.length == 3)
+        {
+            amount = parseInt(args[2], 1, 100);
+            EntityPlayer player = MinecraftServer.getServer().getConfigurationManager().getPlayerByUsername(args[1]);
+            x = player.posX; y = player.posY; z = player.posZ;
+            world = (WorldServer) player.worldObj;
+
+        }
+        else if(args.length == 6)
+        {
+            amount = parseInt(args[5], 1, 100);
+            x = parseInt(args[2]); y = parseInt(args[3]); z = parseInt(args[4]);
+            world = DimensionManager.getWorld(parseInt(args[1]));
+        }
+        else
+        {
+            throw new WrongUsageException(getCommandUsage(sender));
         }
 
         @Nullable Class<?> clazz = null;
@@ -102,9 +127,9 @@ public class CommandSpawnMob extends ServerToolsCommand {
         try {
             Constructor<?> ctor = clazz.getConstructor(World.class);
             for (int i = 0; i < amount; i++) {
-                Entity ent = (Entity) ctor.newInstance(player.worldObj);
-                ent.setPosition(player.posX, player.posY, player.posZ);
-                player.worldObj.spawnEntityInWorld(ent);
+                Entity ent = (Entity) ctor.newInstance(world);
+                ent.setPosition(x, y, z);
+                world.spawnEntityInWorld(ent);
             }
         } catch (Throwable e) {
             throw new CommandException("Failed to spawn entity");
